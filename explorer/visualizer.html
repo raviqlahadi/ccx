@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Codebase Explorer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; }
+#app { display: flex; height: 100vh; }
+#sidebar { width: 340px; background: #161b22; border-right: 1px solid #30363d; overflow-y: auto; padding: 16px; flex-shrink: 0; }
+#graph { flex: 1; position: relative; }
+h1 { font-size: 16px; color: #58a6ff; margin-bottom: 12px; }
+h2 { font-size: 11px; color: #8b949e; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; user-select: none; }
+h2:hover { color: #c9d1d9; }
+h2::before { content: '▸ '; font-size: 9px; }
+h2.open::before { content: '▾ '; }
+.search { width: 100%; padding: 8px 12px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 13px; margin-bottom: 10px; }
+.search:focus { outline: none; border-color: #58a6ff; }
+.controls { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.btn { padding: 4px 8px; font-size: 10px; border-radius: 4px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; }
+.btn:hover { border-color: #58a6ff; }
+.btn.active { background: #1f6feb33; border-color: #58a6ff; color: #58a6ff; }
+.filters { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.filter-btn { padding: 3px 8px; font-size: 10px; border-radius: 12px; border: 1px solid; cursor: pointer; background: transparent; }
+.filter-btn.active { opacity: 1; }
+.filter-btn.inactive { opacity: 0.3; }
+.node-list { list-style: none; display: none; max-height: 200px; overflow-y: auto; }
+.node-list.open { display: block; }
+.node-list li { padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; margin: 1px 0; display: flex; justify-content: space-between; align-items: center; }
+.node-list li:hover { background: #21262d; }
+.node-list li.active { background: #1f6feb33; border-left: 2px solid #58a6ff; }
+.node-list li.changed { border-left: 2px solid #d29922; }
+.complexity-badge { font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 600; }
+.route-list { list-style: none; display: none; max-height: 200px; overflow-y: auto; }
+.route-list.open { display: block; }
+.route-list li { padding: 3px 8px; font-size: 10px; margin: 1px 0; border-radius: 3px; cursor: pointer; font-family: monospace; }
+.route-list li:hover { background: #21262d; }
+.method-badge { font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; margin-right: 4px; }
+.method-GET { background: #2ea04333; color: #3fb950; }
+.method-POST { background: #1f6feb33; color: #58a6ff; }
+.method-PUT { background: #a371f733; color: #bc8cff; }
+.method-DELETE { background: #f8514933; color: #f85149; }
+.table-list { list-style: none; display: none; max-height: 200px; overflow-y: auto; }
+.table-list.open { display: block; }
+.table-list li { padding: 3px 8px; font-size: 10px; margin: 1px 0; font-family: monospace; color: #d29922; }
+.service-list { list-style: none; display: none; max-height: 150px; overflow-y: auto; }
+.service-list.open { display: block; }
+.service-list li { padding: 3px 8px; font-size: 10px; margin: 1px 0; color: #79c0ff; }
+#detail { position: absolute; top: 16px; right: 16px; width: 380px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; display: none; max-height: 85vh; overflow-y: auto; z-index: 10; }
+#detail h3 { color: #58a6ff; font-size: 14px; margin-bottom: 4px; }
+#detail .file-path { color: #8b949e; font-size: 11px; margin-bottom: 4px; font-family: monospace; }
+#detail .file-path a { color: #58a6ff; text-decoration: none; }
+#detail .file-path a:hover { text-decoration: underline; }
+#detail .section-title { font-size: 11px; color: #8b949e; text-transform: uppercase; margin: 10px 0 4px; }
+#detail .method { padding: 4px 0; border-bottom: 1px solid #21262d; font-size: 11px; }
+#detail .method:last-child { border: none; }
+#detail .method-name { color: #d2a8ff; font-weight: 600; cursor: pointer; }
+#detail .method-name:hover { text-decoration: underline; }
+#detail .method-calls { color: #8b949e; margin-top: 2px; padding-left: 12px; font-size: 10px; }
+#detail .dep { display: inline-block; background: #21262d; padding: 2px 8px; border-radius: 4px; margin: 2px; font-size: 10px; cursor: pointer; }
+#detail .dep:hover { background: #30363d; }
+#detail .route-tag { display: inline-block; background: #1f6feb22; border: 1px solid #1f6feb55; padding: 2px 8px; border-radius: 4px; margin: 2px; font-size: 10px; font-family: monospace; }
+#detail .table-tag { display: inline-block; background: #d2992222; border: 1px solid #d2992255; padding: 2px 8px; border-radius: 4px; margin: 2px; font-size: 10px; font-family: monospace; }
+#detail .changed-badge { background: #d29922; color: #0d1117; font-size: 9px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+.legend { position: absolute; bottom: 16px; left: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px; font-size: 10px; z-index: 10; }
+.legend-item { display: flex; align-items: center; margin: 3px 0; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.layer-label { font-size: 12px; fill: #484f58; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+svg { width: 100%; height: 100%; }
+.link { stroke: #30363d; stroke-width: 1; fill: none; stroke-opacity: 0.4; marker-end: url(#arrow); }
+.link.highlighted { stroke: #58a6ff; stroke-width: 2; stroke-opacity: 1; }
+.node circle { stroke-width: 2; cursor: pointer; transition: opacity 0.2s; }
+.node text { font-size: 9px; fill: #c9d1d9; pointer-events: none; }
+.node.dimmed circle { opacity: 0.1; }
+.node.dimmed text { opacity: 0.1; }
+.link.dimmed { stroke-opacity: 0.02; }
+.node.changed circle { stroke-dasharray: 4; stroke-width: 3; }
+#stats { font-size: 10px; color: #8b949e; margin-bottom: 10px; padding: 6px 8px; background: #0d1117; border-radius: 6px; }
+#toolbar { position: absolute; top: 16px; left: 16px; z-index: 10; display: flex; gap: 6px; }
+#toolbar .btn { background: #161b22; border: 1px solid #30363d; padding: 6px 10px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <h1>🔍 Codebase Explorer</h1>
+    <div id="stats"></div>
+    <input class="search" id="search" placeholder="Search classes, methods, routes..." />
+    <div class="controls">
+      <button class="btn active" data-view="graph">Graph</button>
+      <button class="btn" data-view="heatmap">🔥 Heatmap</button>
+      <button class="btn" data-view="layers">📦 Layers</button>
+    </div>
+    <div class="filters">
+      <button class="filter-btn active" data-filter="controller" style="border-color:#58a6ff;color:#58a6ff">Controllers</button>
+      <button class="filter-btn active" data-filter="usecase" style="border-color:#3fb950;color:#3fb950">Usecases</button>
+      <button class="filter-btn active" data-filter="repo" style="border-color:#bc8cff;color:#bc8cff">Repos</button>
+      <button class="filter-btn active" data-filter="other" style="border-color:#8b949e;color:#8b949e">Other</button>
+    </div>
+    <h2 class="open" data-toggle="services">🔗 Services</h2>
+    <ul class="service-list open" id="list-services"></ul>
+    <h2 data-toggle="routes">🛤 Routes</h2>
+    <ul class="route-list" id="list-routes"></ul>
+    <h2 data-toggle="tables">🗄 DB Tables</h2>
+    <ul class="table-list" id="list-tables"></ul>
+    <h2 class="open" data-toggle="controllers">Controllers</h2>
+    <ul class="node-list open" id="list-controllers"></ul>
+    <h2 data-toggle="usecases">Usecases / Services</h2>
+    <ul class="node-list" id="list-usecases"></ul>
+    <h2 data-toggle="repos">Repositories</h2>
+    <ul class="node-list" id="list-repos"></ul>
+    <h2 data-toggle="other">Other</h2>
+    <ul class="node-list" id="list-other"></ul>
+  </div>
+  <div id="graph">
+    <div id="toolbar">
+      <button class="btn" id="btn-mermaid" title="Copy Mermaid diagram">📐 Mermaid</button>
+      <button class="btn" id="btn-reset" title="Reset view">↺ Reset</button>
+    </div>
+    <svg id="svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/>
+        </marker>
+        <marker id="arrow-hl" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#58a6ff"/>
+        </marker>
+      </defs>
+    </svg>
+    <div id="detail"></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>Controller</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>Usecase/Service</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#bc8cff"></div>Repository</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8b949e"></div>Other</div>
+      <div style="margin-top:4px;border-top:1px solid #30363d;padding-top:4px;">
+        <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>Low complexity</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f85149"></div>High complexity</div>
+        <div class="legend-item"><div class="legend-dot" style="border:2px dashed #d29922;background:none"></div>Changed (diff)</div>
+      </div>
+      <div style="margin-top:4px;color:#484f58;font-size:9px">→ arrows show dependency direction</div>
+    </div>
+  </div>
+</div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+let DATA = /*__DATA__*/null;
+let currentView = 'graph';
+let visibleLayers = new Set(['controller', 'usecase', 'repo', 'other']);
+let projectRoot = '';
+
+function classify(name, file) {
+  const lname = (name + ' ' + file).toLowerCase();
+  if (lname.includes('controller')) return 'controller';
+  if (lname.includes('usecase') || lname.includes('service') || lname.includes('interactor')) return 'usecase';
+  if (lname.includes('repository') || lname.includes('repo')) return 'repo';
+  return 'other';
+}
+function getLayerColor(t) { return {controller:'#58a6ff',usecase:'#3fb950',repo:'#bc8cff',other:'#8b949e'}[t]||'#8b949e'; }
+function getComplexityColor(c) {
+  if (c<=5) return '#3fb950'; if (c<=15) return '#7ee787'; if (c<=30) return '#d29922'; if (c<=60) return '#e09b13'; return '#f85149';
+}
+function getMaxComplexity(methods, cm) {
+  let max=0; Object.keys(methods).forEach(n=>{const c=cm[n]||0;if(c>max)max=c;}); return max;
+}
+function vsCodeLink(file, line) {
+  return `vscode://file/${projectRoot}/${file}${line?':'+line:''}`;
+}
+
+function init() {
+  if (!DATA||!DATA.files){document.getElementById('stats').textContent='No data loaded.';return;}
+  projectRoot = DATA.projectRoot || '';
+  const nodes=[],edges=[],nodeMap={};
+  const routes=DATA.routes||[];
+  const tables=DATA.tables||{};
+  const services=DATA.services||{};
+  const kafkaTopics=DATA.kafka_topics||{};
+  const changedFiles=new Set(DATA.changed_files||[]);
+
+  const routesByController={};
+  routes.forEach(r=>{const k=r.controller.replace(/.*\\/,'');if(!routesByController[k])routesByController[k]=[];routesByController[k].push(r);});
+
+  // Tables by file
+  const tablesByFile={};
+  Object.entries(tables).forEach(([tbl,files])=>{
+    files.forEach(f=>{if(!tablesByFile[f])tablesByFile[f]=[];tablesByFile[f].push(tbl);});
+  });
+
+  DATA.files.forEach(file=>{
+    const classes=file.classes||file.structs||{};
+    const cm=file.complexity||{};
+    Object.entries(classes).forEach(([name,info])=>{
+      const type=classify(name,file.path);
+      const methods=info.methods||{};
+      const methodCount=Object.keys(methods).length;
+      const deps=Array.isArray(info.dependencies)?info.dependencies:Object.values(info.dependencies||{});
+      const maxC=getMaxComplexity(methods,cm);
+      const nodeRoutes=routesByController[name]||[];
+      const nodeTables=tablesByFile[file.path]||[];
+      const isChanged=changedFiles.has(file.path)||changedFiles.has('app/'+file.path);
+      nodes.push({id:name,type,file:file.path,methods,deps,methodCount,maxComplexity:maxC,complexity:cm,routes:nodeRoutes,tables:nodeTables,isChanged});
+      nodeMap[name]={...nodes[nodes.length-1],idx:nodes.length-1};
+    });
+  });
+
+  // Edges
+  nodes.forEach(node=>{
+    node.deps.forEach(dep=>{
+      const dn=dep.replace(/^\*/,'').split('.').pop();
+      if(nodeMap[dn]&&dn!==node.id)edges.push({source:node.id,target:dn,type:'dependency'});
+    });
+    Object.values(node.methods).forEach(method=>{
+      const calls=Array.isArray(method.calls)?method.calls:Object.values(method.calls||{});
+      calls.forEach(call=>{
+        const t=call.replace(/^\$this->/,'').split('->')[0].split('.')[0].replace(/^\$/,'');
+        if(nodeMap[t]&&t!==node.id)edges.push({source:node.id,target:t,type:'call'});
+      });
+    });
+  });
+  const edgeSet=new Set();
+  const uniqueEdges=edges.filter(e=>{const k=e.source+'->'+e.target;if(edgeSet.has(k))return false;edgeSet.add(k);return true;});
+
+  // Stats
+  document.getElementById('stats').innerHTML=`<strong>${nodes.length}</strong> classes | <strong>${uniqueEdges.length}</strong> edges | <strong>${routes.length}</strong> routes | <strong>${Object.keys(tables).length}</strong> tables | <strong>${Object.keys(services).length}</strong> services`;
+
+  // Populate services
+  const svcList=document.getElementById('list-services');
+  Object.entries(services).forEach(([name,url])=>{
+    const li=document.createElement('li');
+    li.textContent=`${name}`;
+    li.title=url;
+    svcList.appendChild(li);
+  });
+
+  // Populate routes
+  const routeList=document.getElementById('list-routes');
+  routes.slice(0,300).forEach(r=>{
+    const li=document.createElement('li');
+    li.innerHTML=`<span class="method-badge method-${r.method}">${r.method}</span>${r.uri}`;
+    li.onclick=()=>{const cn=r.controller.replace(/.*\\/,'');if(nodeMap[cn])selectNode(cn);};
+    routeList.appendChild(li);
+  });
+
+  // Populate tables
+  const tableList=document.getElementById('list-tables');
+  Object.entries(tables).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([tbl,files])=>{
+    const li=document.createElement('li');
+    li.textContent=`${tbl} (${files.length})`;
+    li.title=files.join('\n');
+    tableList.appendChild(li);
+  });
+
+  // Populate sidebar nodes
+  const lists={controller:'list-controllers',usecase:'list-usecases',repo:'list-repos',other:'list-other'};
+  nodes.sort((a,b)=>b.maxComplexity-a.maxComplexity);
+  nodes.forEach(node=>{
+    const li=document.createElement('li');
+    const badge=node.maxComplexity>0?`<span class="complexity-badge" style="background:${getComplexityColor(node.maxComplexity)}22;color:${getComplexityColor(node.maxComplexity)}">${node.maxComplexity}</span>`:'';
+    li.innerHTML=`<span>${node.id}</span>${badge}`;
+    li.dataset.id=node.id;
+    if(node.isChanged)li.classList.add('changed');
+    li.onclick=()=>selectNode(node.id);
+    document.getElementById(lists[node.type]).appendChild(li);
+  });
+
+  // Toggle sections
+  document.querySelectorAll('h2[data-toggle]').forEach(h=>{
+    h.onclick=()=>{h.classList.toggle('open');h.nextElementSibling.classList.toggle('open');};
+  });
+
+  // Search
+  document.getElementById('search').oninput=function(){
+    const q=this.value.toLowerCase();
+    document.querySelectorAll('.node-list li,.route-list li,.table-list li').forEach(li=>{
+      li.style.display=li.textContent.toLowerCase().includes(q)?'':'none';
+    });
+  };
+
+  // D3 Graph
+  const svg=d3.select('#svg');
+  const width=document.getElementById('graph').clientWidth;
+  const height=document.getElementById('graph').clientHeight;
+  const g=svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.1,5]).on('zoom',e=>g.attr('transform',e.transform)));
+
+  const layerX={controller:width*0.2,usecase:width*0.5,repo:width*0.8,other:width*0.5};
+
+  const simulation=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(uniqueEdges).id(d=>d.id).distance(90).strength(0.3))
+    .force('charge',d3.forceManyBody().strength(-180))
+    .force('center',d3.forceCenter(width/2,height/2))
+    .force('collision',d3.forceCollide(30));
+
+  const layerBgs=g.append('g');
+  const link=g.append('g').selectAll('line').data(uniqueEdges).enter().append('line').attr('class','link');
+  const node=g.append('g').selectAll('g').data(nodes).enter().append('g').attr('class','node')
+    .classed('changed',d=>d.isChanged)
+    .call(d3.drag()
+      .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+      .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;})
+      .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;})
+    );
+
+  node.append('circle')
+    .attr('r',d=>6+Math.min(d.methodCount*1.2,18))
+    .attr('fill',d=>getLayerColor(d.type))
+    .attr('stroke',d=>d.isChanged?'#d29922':getLayerColor(d.type))
+    .attr('fill-opacity',0.25)
+    .on('click',(e,d)=>{e.stopPropagation();selectNode(d.id);});
+
+  node.append('text')
+    .attr('dy',d=>-(10+Math.min(d.methodCount*1.2,18)))
+    .attr('text-anchor','middle')
+    .text(d=>d.id.length>24?d.id.substring(0,21)+'...':d.id);
+
+  simulation.on('tick',()=>{
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    node.attr('transform',d=>`translate(${d.x},${d.y})`);
+  });
+
+  // Filter by layer
+  document.querySelectorAll('.filter-btn').forEach(btn=>{
+    btn.onclick=()=>{
+      const layer=btn.dataset.filter;
+      if(visibleLayers.has(layer)){visibleLayers.delete(layer);btn.classList.replace('active','inactive');}
+      else{visibleLayers.add(layer);btn.classList.replace('inactive','active');}
+      node.style('display',d=>visibleLayers.has(d.type)?null:'none');
+      link.style('display',d=>{
+        const src=typeof d.source==='object'?d.source:nodeMap[d.source];
+        const tgt=typeof d.target==='object'?d.target:nodeMap[d.target];
+        if(!src||!tgt)return null;
+        const sType=typeof d.source==='object'?d.source.type:nodeMap[d.source]?.type;
+        const tType=typeof d.target==='object'?d.target.type:nodeMap[d.target]?.type;
+        return visibleLayers.has(sType)&&visibleLayers.has(tType)?null:'none';
+      });
+    };
+  });
+
+  // View modes
+  function setView(view){
+    currentView=view;
+    document.querySelectorAll('.btn[data-view]').forEach(b=>b.classList.remove('active'));
+    document.querySelector(`.btn[data-view="${view}"]`).classList.add('active');
+    if(view==='heatmap'){
+      node.select('circle').transition().duration(400)
+        .attr('fill',d=>getComplexityColor(d.maxComplexity))
+        .attr('stroke',d=>d.isChanged?'#d29922':getComplexityColor(d.maxComplexity))
+        .attr('fill-opacity',d=>d.maxComplexity>15?0.6:0.25);
+      simulation.force('x',null).force('y',null);layerBgs.selectAll('*').remove();
+    } else if(view==='layers'){
+      node.select('circle').transition().duration(400)
+        .attr('fill',d=>getLayerColor(d.type)).attr('stroke',d=>d.isChanged?'#d29922':getLayerColor(d.type)).attr('fill-opacity',0.25);
+      simulation.force('x',d3.forceX(d=>layerX[d.type]).strength(0.5)).force('y',d3.forceY(height/2).strength(0.05)).alpha(0.8).restart();
+      layerBgs.selectAll('*').remove();
+      [{text:'CONTROLLERS',x:layerX.controller},{text:'USECASES',x:layerX.usecase},{text:'REPOSITORIES',x:layerX.repo}].forEach(l=>{
+        layerBgs.append('text').attr('class','layer-label').attr('x',l.x).attr('y',50).attr('text-anchor','middle').text(l.text);
+      });
+    } else {
+      node.select('circle').transition().duration(400)
+        .attr('fill',d=>getLayerColor(d.type)).attr('stroke',d=>d.isChanged?'#d29922':getLayerColor(d.type)).attr('fill-opacity',0.25);
+      simulation.force('x',null).force('y',null).force('center',d3.forceCenter(width/2,height/2)).alpha(0.5).restart();
+      layerBgs.selectAll('*').remove();
+    }
+  }
+  document.querySelectorAll('.btn[data-view]').forEach(btn=>{btn.onclick=()=>setView(btn.dataset.view);});
+
+  // Reset
+  document.getElementById('btn-reset').onclick=()=>{
+    node.classed('dimmed',false);link.classed('dimmed',false).classed('highlighted',false);
+    document.getElementById('detail').style.display='none';
+    setView('graph');
+  };
+
+  // Mermaid export
+  document.getElementById('btn-mermaid').onclick=()=>{
+    let lines=['graph LR'];
+    nodes.forEach(n=>{
+      const cls=n.type==='controller'?':::controller':n.type==='usecase'?':::usecase':n.type==='repo'?':::repo':'';
+      lines.push(`    ${n.id.replace(/[^a-zA-Z0-9]/g,'')}["${n.id}"]${cls}`);
+    });
+    uniqueEdges.forEach(e=>{
+      const s=typeof e.source==='object'?e.source.id:e.source;
+      const t=typeof e.target==='object'?e.target.id:e.target;
+      lines.push(`    ${s.replace(/[^a-zA-Z0-9]/g,'')} --> ${t.replace(/[^a-zA-Z0-9]/g,'')}`);
+    });
+    lines.push('');
+    lines.push('    classDef controller fill:#1f6feb33,stroke:#58a6ff');
+    lines.push('    classDef usecase fill:#2ea04333,stroke:#3fb950');
+    lines.push('    classDef repo fill:#a371f733,stroke:#bc8cff');
+    const mmd=lines.join('\n');
+    navigator.clipboard.writeText(mmd).then(()=>alert('Mermaid diagram copied to clipboard!')).catch(()=>{
+      const w=window.open('','_blank');w.document.write('<pre>'+mmd+'</pre>');
+    });
+  };
+
+  // Select node
+  window.selectNode=function(id){
+    const n=nodeMap[id];if(!n)return;
+    document.querySelectorAll('.node-list li').forEach(li=>li.classList.remove('active'));
+    document.querySelector(`[data-id="${id}"]`)?.classList.add('active');
+    const connected=new Set([id]);
+    uniqueEdges.forEach(e=>{
+      const src=typeof e.source==='object'?e.source.id:e.source;
+      const tgt=typeof e.target==='object'?e.target.id:e.target;
+      if(src===id)connected.add(tgt);if(tgt===id)connected.add(src);
+    });
+    node.classed('dimmed',d=>!connected.has(d.id));
+    link.classed('dimmed',d=>{const s=typeof d.source==='object'?d.source.id:d.source;const t=typeof d.target==='object'?d.target.id:d.target;return s!==id&&t!==id;});
+    link.classed('highlighted',d=>{const s=typeof d.source==='object'?d.source.id:d.source;const t=typeof d.target==='object'?d.target.id:d.target;return s===id||t===id;});
+
+    const detail=document.getElementById('detail');
+    const changedBadge=n.isChanged?'<span class="changed-badge">CHANGED</span>':'';
+    let html=`<h3>${n.id}${changedBadge}</h3>`;
+    html+=`<div class="file-path"><a href="${vsCodeLink(n.file)}" title="Open in VS Code">${n.file} ↗</a></div>`;
+
+    if(n.routes.length){
+      html+=`<div class="section-title">API Routes (${n.routes.length})</div>`;
+      n.routes.forEach(r=>{html+=`<span class="route-tag"><span class="method-badge method-${r.method}">${r.method}</span>${r.uri}</span>`;});
+    }
+    if(n.tables.length){
+      html+=`<div class="section-title">DB Tables</div>`;
+      n.tables.forEach(t=>{html+=`<span class="table-tag">🗄 ${t}</span>`;});
+    }
+    if(n.deps.length){
+      html+=`<div class="section-title">Dependencies</div><div>`;
+      n.deps.forEach(d=>{
+        const dn=d.replace(/^\*/,'').split('.').pop();
+        html+=`<span class="dep" onclick="selectNode('${dn}')">${d}</span>`;
+      });
+      html+=`</div>`;
+    }
+    html+=`<div class="section-title">Methods (${n.methodCount})</div>`;
+    const sorted=Object.entries(n.methods).sort((a,b)=>(n.complexity[b[0]]||0)-(n.complexity[a[0]]||0));
+    sorted.forEach(([name,m])=>{
+      const c=n.complexity[name]||0;
+      const cBadge=c>0?`<span class="complexity-badge" style="background:${getComplexityColor(c)}22;color:${getComplexityColor(c)};margin-left:4px">${c}</span>`:'';
+      const line=m.line||'';
+      html+=`<div class="method"><a class="method-name" href="${vsCodeLink(n.file,line)}" title="Open in VS Code">${name}</a>${cBadge}`;
+      const calls=Array.isArray(m.calls)?m.calls:Object.values(m.calls||{});
+      if(calls.length){html+=`<div class="method-calls">→ ${calls.slice(0,8).join(', ')}${calls.length>8?'...':''}</div>`;}
+      html+=`</div>`;
+    });
+    detail.innerHTML=html;detail.style.display='block';
+  };
+
+  svg.on('click',function(e){
+    if(e.target.tagName==='svg'||e.target.tagName==='g'){
+      node.classed('dimmed',false);link.classed('dimmed',false).classed('highlighted',false);
+      document.getElementById('detail').style.display='none';
+      document.querySelectorAll('.node-list li').forEach(li=>li.classList.remove('active'));
+    }
+  });
+}
+
+if(DATA){init();}else{fetch('codebase.json').then(r=>r.json()).then(d=>{DATA=d;init();}).catch(()=>{document.getElementById('stats').textContent='Error: No data found.';});}
+</script>
+</body>
+</html>

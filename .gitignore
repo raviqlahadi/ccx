@@ -1,3 +1,4 @@
-analyze_go
-explorer/extract_go_bin
-explorer/*_output.html
+bin/
+web/d3.min.js
+*.html
+__pycache__/
